@@ -1,0 +1,19 @@
+# Local build overlay. Run together with compose.yaml from this repository.
+services:
+  intercom:
+    image: wkt-intercom-server:local-build
+    build:
+      context: ../wkt-intercom-server
+      dockerfile: Dockerfile
+
+  ai:
+    image: wkt-ai-server:local-build
+    build:
+      context: ../wkt-ai-server
+      dockerfile: Dockerfile
+
+  ota:
+    image: wkt-ota-server:local-build
+    build:
+      context: ../wkt-ota-server
+      dockerfile: Dockerfile

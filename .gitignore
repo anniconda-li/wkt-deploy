@@ -1,0 +1,28 @@
+# Runtime configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Persistent and generated data
+data/
+backups/
+firmware/
+uploads/
+outputs/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Local audit and tooling state
+.audit/
+.tmp/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

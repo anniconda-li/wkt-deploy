@@ -1,0 +1,52 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate production Compose
+        run: docker compose --env-file .env.example -f compose.yaml config --quiet
+
+      - name: Validate local-build Compose merge
+        run: docker compose --env-file .env.example -f compose.yaml -f compose.build.yaml config --quiet
+
+      - name: Validate shell syntax
+        run: bash -n scripts/*.sh
+
+      - name: Run ShellCheck
+        run: docker run --rm -v "$PWD:/work:ro" -w /work koalaman/shellcheck-alpine:v0.10.0 scripts/*.sh
+
+      - name: Validate Nginx template syntax
+        run: |
+          mkdir -p .tmp/nginx/conf.d .tmp/nginx/certs
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+            -subj '/CN=deploy.invalid' \
+            -keyout .tmp/nginx/certs/key.pem \
+            -out .tmp/nginx/certs/cert.pem >/dev/null 2>&1
+          sed \
+            -e 's/YOUR_DOMAIN\.example/deploy.invalid/g' \
+            -e 's#/REPLACE/WITH/fullchain.pem#/etc/nginx/certs/cert.pem#g' \
+            -e 's#/REPLACE/WITH/privkey.pem#/etc/nginx/certs/key.pem#g' \
+            nginx/wkt-platform.conf.example > .tmp/nginx/conf.d/default.conf
+          docker run --rm \
+            -v "$PWD/.tmp/nginx/conf.d:/etc/nginx/conf.d:ro" \
+            -v "$PWD/.tmp/nginx/certs:/etc/nginx/certs:ro" \
+            nginx:1.27.5-alpine nginx -t
+
+      - name: Reject tracked secrets and runtime data
+        run: |
+          test -z "$(git ls-files | grep -E '(^|/)(\.env|.*\.(pem|key|p12|pfx|db|sqlite|sqlite3))$' || true)"
+          test -z "$(git ls-files | grep -E '(^|/)(data|backups|firmware|uploads|outputs)/' || true)"
+          if git grep -nE '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,})' -- ':!*.example'; then
+            echo 'Potential secret found in tracked files' >&2
+            exit 1
+          fi

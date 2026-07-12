@@ -1,0 +1,148 @@
+name: wkt-platform
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck: &default-healthcheck
+  interval: 30s
+  timeout: 5s
+  retries: 3
+  start_period: 20s
+
+services:
+  intercom:
+    image: ${INTERCOM_IMAGE:-ghcr.io/anniconda-li/wkt-intercom-server:REPLACE_WITH_VERSION}
+    restart: unless-stopped
+    environment:
+      INTERCOM_HOST: 0.0.0.0
+      INTERCOM_WS_PORT: "18081"
+      INTERCOM_LOG_STATS: ${INTERCOM_LOG_STATS:-1}
+      INTERCOM_LOG_AUDIO_TRACE: ${INTERCOM_LOG_AUDIO_TRACE:-0}
+      INTERCOM_AUDIO_LOG_EVERY_N: ${INTERCOM_AUDIO_LOG_EVERY_N:-50}
+      INTERCOM_SEND_QUEUE_MAX: ${INTERCOM_SEND_QUEUE_MAX:-80}
+      INTERCOM_SEND_TIMEOUT_SECONDS: ${INTERCOM_SEND_TIMEOUT_SECONDS:-2}
+      INTERCOM_REALTIME_WINDOW_MS: ${INTERCOM_REALTIME_WINDOW_MS:-400}
+      INTERCOM_STATS_INTERVAL_MS: ${INTERCOM_STATS_INTERVAL_MS:-1000}
+    ports:
+      - name: websocket
+        target: 18081
+        published: "${INTERCOM_HOST_PORT:-18081}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD
+        - python
+        - -c
+        - "from websockets.sync.client import connect; ws=connect('ws://127.0.0.1:18081/intercom/ws?device=wkt-deploy-healthcheck',open_timeout=3,close_timeout=1); ws.close()"
+    logging: *default-logging
+    networks:
+      - platform
+
+  ai:
+    image: ${AI_IMAGE:-ghcr.io/anniconda-li/wkt-ai-server:REPLACE_WITH_VERSION}
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-deepseek-v4-flash}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.deepseek.com}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      VISION_PROVIDER: ${VISION_PROVIDER:-dashscope}
+      VISION_MODEL: ${VISION_MODEL:-qwen-vl-plus}
+      VISION_BASE_URL: ${VISION_BASE_URL:-}
+      VISION_API_KEY: ${VISION_API_KEY:-}
+      VISION_MIN_CONFIDENCE: ${VISION_MIN_CONFIDENCE:-0.60}
+      MAX_SAVED_IMAGES_PER_DEVICE: ${MAX_SAVED_IMAGES_PER_DEVICE:-10}
+      ASR_PROVIDER: ${ASR_PROVIDER:-dashscope}
+      ASR_MODEL: ${ASR_MODEL:-paraformer-realtime-v2}
+      ASR_API_KEY: ${ASR_API_KEY:-}
+      ASR_FRAME_BYTES: ${ASR_FRAME_BYTES:-3200}
+      ASR_FRAME_SLEEP_SECONDS: ${ASR_FRAME_SLEEP_SECONDS:-0}
+      ASR_ARTIFACT_PHONETIC_THRESHOLD: ${ASR_ARTIFACT_PHONETIC_THRESHOLD:-0.86}
+      ASR_EXTRA_KWARGS: ${ASR_EXTRA_KWARGS:-}
+      TTS_PROVIDER: ${TTS_PROVIDER:-dashscope}
+      TTS_API_STYLE: ${TTS_API_STYLE:-dashscope_qwen}
+      TTS_MODEL: ${TTS_MODEL:-qwen3-tts-flash}
+      TTS_VOICE: ${TTS_VOICE:-Cherry}
+      TTS_LANGUAGE_TYPE: ${TTS_LANGUAGE_TYPE:-Chinese}
+      TTS_RESPONSE_FORMAT: ${TTS_RESPONSE_FORMAT:-wav}
+      TTS_API_KEY: ${TTS_API_KEY:-}
+      TTS_BASE_URL: ${TTS_BASE_URL:-}
+      DASHSCOPE_TTS_BASE_URL: ${DASHSCOPE_TTS_BASE_URL:-}
+      TTS_ENDPOINT: ${TTS_ENDPOINT:-}
+      TTS_TIMEOUT_SECONDS: ${TTS_TIMEOUT_SECONDS:-120}
+      TTS_EXTRA_JSON: ${TTS_EXTRA_JSON:-}
+      FFMPEG_BIN: ${FFMPEG_BIN:-ffmpeg}
+      AI_MOCK_ASR_TEXT: ${AI_MOCK_ASR_TEXT:-}
+      AI_MOCK_LLM_TEXT: ${AI_MOCK_LLM_TEXT:-}
+      AI_ENABLE_MOCK_TTS: ${AI_ENABLE_MOCK_TTS:-false}
+      AI_MOCK_TTS_SECONDS: ${AI_MOCK_TTS_SECONDS:-0.4}
+      AI_NO_SPEECH_TEXT: ${AI_NO_SPEECH_TEXT:-我没有听清，请再说一遍。}
+      AI_ASR_ERROR_TEXT: ${AI_ASR_ERROR_TEXT:-语音识别暂时不可用，请稍后再试。}
+      AI_SILENCE_RMS_THRESHOLD: ${AI_SILENCE_RMS_THRESHOLD:-80}
+      AI_MIN_SPEECH_SECONDS: ${AI_MIN_SPEECH_SECONDS:-0.2}
+    ports:
+      - name: http
+        target: 8000
+        published: "${AI_HOST_PORT:-18080}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ${AI_DATA_ROOT:-./data/ai}/uploads
+        target: /app/uploads
+      - type: bind
+        source: ${AI_DATA_ROOT:-./data/ai}/outputs
+        target: /app/outputs
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3).read()"
+    logging: *default-logging
+    networks:
+      - platform
+
+  ota:
+    image: ${OTA_IMAGE:-ghcr.io/anniconda-li/wkt-ota-server:REPLACE_WITH_VERSION}
+    restart: unless-stopped
+    environment:
+      OTA_PUBLIC_BASE_URL: ${OTA_PUBLIC_BASE_URL:-https://ota.example.com}
+      OTA_DATA_DIR: /app/data
+      OTA_DEVICE_TOKEN: ${OTA_DEVICE_TOKEN:-}
+      OTA_ALLOW_TOKEN_QUERY: ${OTA_ALLOW_TOKEN_QUERY:-false}
+      OTA_MAX_CHUNK_SIZE: ${OTA_MAX_CHUNK_SIZE:-49152}
+      OTA_LOG_LEVEL: ${OTA_LOG_LEVEL:-INFO}
+    ports:
+      - name: http
+        target: 8000
+        published: "${OTA_HOST_PORT:-18082}"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: ${OTA_DATA_ROOT:-./data/ota}
+        target: /app/data
+    healthcheck:
+      <<: *default-healthcheck
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3).read()"
+    logging: *default-logging
+    networks:
+      - platform
+
+networks:
+  platform:
+    name: wkt-platform
+    driver: bridge
