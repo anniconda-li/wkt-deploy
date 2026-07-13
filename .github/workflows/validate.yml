@@ -57,7 +57,7 @@ jobs:
         run: bash -n scripts/*.sh
 
       - name: Run ShellCheck
-        run: docker run --rm -v "$PWD:/work:ro" -w /work koalaman/shellcheck-alpine:v0.10.0 scripts/*.sh
+        run: docker run --rm -v "$PWD:/work:ro" -w /work koalaman/shellcheck-alpine:v0.10.0 shellcheck scripts/*.sh
 
       - name: Reject tracked secrets and runtime data
         run: |
