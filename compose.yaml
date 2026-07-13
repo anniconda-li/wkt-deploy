@@ -14,7 +14,7 @@ x-healthcheck: &default-healthcheck
 
 services:
   intercom:
-    image: ${INTERCOM_IMAGE:-ghcr.io/anniconda-li/wkt-intercom-server:REPLACE_WITH_VERSION}
+    image: ${INTERCOM_IMAGE:-ghcr.io/anniconda-li/wkt-intercom-server:0.1.0}
     restart: unless-stopped
     environment:
       INTERCOM_HOST: 0.0.0.0
@@ -30,7 +30,7 @@ services:
       - name: websocket
         target: 18081
         published: "${INTERCOM_HOST_PORT:-18081}"
-        host_ip: 127.0.0.1
+        host_ip: 0.0.0.0
         protocol: tcp
     healthcheck:
       <<: *default-healthcheck
@@ -44,7 +44,7 @@ services:
       - platform
 
   ai:
-    image: ${AI_IMAGE:-ghcr.io/anniconda-li/wkt-ai-server:REPLACE_WITH_VERSION}
+    image: ${AI_IMAGE:-ghcr.io/anniconda-li/wkt-ai-server:0.1.0}
     restart: unless-stopped
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -91,7 +91,7 @@ services:
       - name: http
         target: 8000
         published: "${AI_HOST_PORT:-18080}"
-        host_ip: 127.0.0.1
+        host_ip: 0.0.0.0
         protocol: tcp
     volumes:
       - type: bind
@@ -112,20 +112,17 @@ services:
       - platform
 
   ota:
-    image: ${OTA_IMAGE:-ghcr.io/anniconda-li/wkt-ota-server:REPLACE_WITH_VERSION}
+    image: ${OTA_IMAGE:-ghcr.io/anniconda-li/wkt-ota-server:1.0.0}
     restart: unless-stopped
     environment:
-      OTA_PUBLIC_BASE_URL: ${OTA_PUBLIC_BASE_URL:-https://ota.example.com}
+      OTA_PUBLIC_BASE_URL: ${OTA_PUBLIC_BASE_URL:-http://139.129.17.67:18082}
       OTA_DATA_DIR: /app/data
-      OTA_DEVICE_TOKEN: ${OTA_DEVICE_TOKEN:-}
-      OTA_ALLOW_TOKEN_QUERY: ${OTA_ALLOW_TOKEN_QUERY:-false}
-      OTA_MAX_CHUNK_SIZE: ${OTA_MAX_CHUNK_SIZE:-49152}
       OTA_LOG_LEVEL: ${OTA_LOG_LEVEL:-INFO}
     ports:
       - name: http
         target: 8000
         published: "${OTA_HOST_PORT:-18082}"
-        host_ip: 127.0.0.1
+        host_ip: 0.0.0.0
         protocol: tcp
     volumes:
       - type: bind

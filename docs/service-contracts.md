@@ -1,42 +1,25 @@
-# Service deployment contracts
+# 服务部署契约
 
-This document records only facts discoverable from the three sibling repositories on 2026-07-12. No sibling repository was modified.
+本文件记录 2026-07-13 对三个相邻业务仓库的只读核对结果；未修改相邻仓库。
 
-## Contract summary
-
-| Service | Source state | Image entrypoint | Container port | Health | Writable paths |
+| 服务 | 核对提交 | 正式镜像 | 容器端口 | 健康检查 | Volume |
 | --- | --- | --- | ---: | --- | --- |
-| intercom | `main` at `c6ecf67` | `python main.py` | `18081` | WebSocket handshake on `/intercom/ws` | None declared |
-| ai | `main` at `e2dcfcc` | `python -m uvicorn main:app --host 0.0.0.0 --port 8000` | `8000` | `GET /health` -> `{"status":"ok"}` | `/app/uploads`, `/app/outputs` |
-| ota | `main` at `895f68f` | `python -m app` | `8000` | `GET /health` | `/app/data` |
+| intercom | `e5eb6ca` | `ghcr.io/anniconda-li/wkt-intercom-server:0.1.0` | `18081` | WebSocket `/intercom/ws?device=wkt-deploy-healthcheck` | 无 |
+| ai | `6b241cd` | `ghcr.io/anniconda-li/wkt-ai-server:0.1.0` | `8000` | `GET /health` | `/app/uploads`、`/app/outputs` |
+| ota | `214431f` | `ghcr.io/anniconda-li/wkt-ota-server:1.0.0` | `8000` | `GET /health` | `/app/data` |
 
-## wkt-intercom-server
+## 对讲
 
-- Dockerfile: Python 3.12 slim, non-root `app` user, `EXPOSE 18081`, `CMD ["python", "main.py"]`.
-- Sibling Compose: service `intercom`, container `wkt-intercom-server`, container port `18081`.
-- WebSocket route: exactly `/intercom/ws`; `device` query parameter is required. The service rejects any other path.
-- Runtime variables: `INTERCOM_HOST`, `INTERCOM_WS_PORT`, `INTERCOM_LOG_STATS`, `INTERCOM_LOG_AUDIO_TRACE`, `INTERCOM_AUDIO_LOG_EVERY_N`, `INTERCOM_SEND_QUEUE_MAX`, `INTERCOM_SEND_TIMEOUT_SECONDS`, `INTERCOM_REALTIME_WINDOW_MS`, `INTERCOM_STATS_INTERVAL_MS`.
-- Volumes: none.
-- Health: no HTTP route or image healthcheck exists. The deployment repository performs the documented WebSocket handshake with the reserved device id `wkt-deploy-healthcheck`, then closes the connection.
+Dockerfile 使用 Python 3.12、非 root 用户、`EXPOSE 18081` 和 `python main.py`。服务仅接受 `/intercom/ws`，并要求 `device` 查询参数。运行变量为 `INTERCOM_HOST`、`INTERCOM_WS_PORT` 及日志、队列、超时和实时窗口调优项；无持久化 Volume。
 
-## wkt-ai-server
+## AI
 
-- Dockerfile: Python 3.11 slim plus `ca-certificates` and `ffmpeg`, `EXPOSE 8000`, Uvicorn command shown above.
-- Sibling Compose: service `ai`; mounts `./uploads:/app/uploads` and `./outputs:/app/outputs`.
-- Persistent writes:
-  - camera images and uploaded request WAVs under `/app/uploads`;
-  - generated/reply WAVs under `/app/outputs`.
-- `data/artifacts/*.json` is tracked application knowledge loaded relative to the source tree. It is image content, not a writable runtime volume. Mounting an empty host directory over `/app/data` would hide it, so the unified Compose intentionally does not do that.
-- Health: `GET /health` returns `{"status":"ok"}`.
-- Routes found in `main.py`: `GET /health`, `/sessions`, `/artifacts`, `/artifacts/{artifact_id}`, `/sessions/{device_id}`; `POST /sessions/{device_id}/clear`, `/sessions/{device_id}/artifact-context`, `/camera/upload`, `/ai/start`, `/ai/upload`, `/ai/finish`, `/ai/result_info`, `/ai/result_chunk`, `/ai/cancel`, `/ai/stop_audio`, `/chat`.
-- Runtime variables found in the sibling `.env.example` and source lookups are mirrored into this repository's `.env.example`; real API keys must stay in untracked `.env`. Source-only optional overrides include `TTS_RESPONSE_FORMAT` and `DASHSCOPE_TTS_BASE_URL`.
+Dockerfile 使用 Python 3.11、Uvicorn `0.0.0.0:8000`，镜像自带 `GET /health` 检查。相机图片与上传音频写入 `/app/uploads`，生成输出写入 `/app/outputs`。镜像内 `/app/data/artifacts` 是只读应用资源，不能用空运行目录覆盖。
 
-## wkt-ota-server
+AI 运行环境包括 OpenAI-compatible 文本模型、DashScope、视觉、ASR、TTS 和设备协议配置。真实 API Key 只能存在于未跟踪的 `.env`；`.env.example` 仅使用 `REPLACE_WITH_SECRET` 占位符。
 
-- Dockerfile: Python 3.12 slim, non-root `ota` user with UID/GID `10001`, `EXPOSE 8000`, `CMD ["python", "-m", "app"]`.
-- Sibling Compose: service `ota`, loopback host mapping `18082:8000`, and `./data:/app/data`.
-- Persistent root: `/app/data`; SQLite is `/app/data/ota.db` (WAL mode) and firmware is `/app/data/firmware/{hardware}/{version}/firmware.bin`. One root mount preserves the database, WAL sidecars, incoming files and firmware atomically.
-- Health: `GET /health` on container port `8000`; both its image and sibling Compose use a Python `urllib` probe.
-- Environment: `OTA_PUBLIC_BASE_URL`, fixed container `OTA_DATA_DIR=/app/data`, `OTA_DEVICE_TOKEN`, `OTA_ALLOW_TOKEN_QUERY`, `OTA_MAX_CHUNK_SIZE`, `OTA_LOG_LEVEL`.
-- Verified API routes: `GET /api/v1/ota/check`; `GET /api/v1/ota/firmware/{hardware}/{version}` with single-range support; `GET /api/v1/ota/chunk/{hardware}/{version}`; `POST /api/v1/ota/report`.
-- Authentication: when configured, `X-Device-Token` protects every `/api/v1/ota/*` route. Query tokens are disabled by default and should remain disabled unless a device cannot set headers.
+## OTA
+
+Dockerfile 使用 Python 3.12、UID/GID `10001`、`EXPOSE 8000`、`python -m app` 和 `GET /health`。`/app/data` 同时保存 SQLite/WAL、固件和发布临时文件，应整体持久化与备份。
+
+当前程序读取的环境变量只有 `OTA_PUBLIC_BASE_URL`、`OTA_DATA_DIR` 和 `OTA_LOG_LEVEL`。第一阶段公共地址固定为 `http://139.129.17.67:18082`，仅支持绝对 HTTP URL；设备 API 不要求 Token。

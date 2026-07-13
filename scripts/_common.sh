@@ -44,13 +44,10 @@ assert_image_ready() {
 }
 
 assert_ota_contract_ready() {
-  local public_url token
+  local public_url
   public_url="$(env_value OTA_PUBLIC_BASE_URL)"
-  token="$(env_value OTA_DEVICE_TOKEN)"
-  [[ "${public_url}" == https://* && "${public_url}" != *example.com* ]] || \
-    die "OTA_PUBLIC_BASE_URL must be the real externally terminated HTTPS URL"
-  [[ -n "${token}" && "${token}" != REPLACE_WITH_* && ${#token} -ge 24 ]] || \
-    die "OTA_DEVICE_TOKEN must be a real random token of at least 24 characters"
+  [[ "${public_url}" == http://* ]] || \
+    die "OTA_PUBLIC_BASE_URL must be an absolute HTTP URL for first-stage deployment"
 }
 
 assert_ai_runtime_ready() {

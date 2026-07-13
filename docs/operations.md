@@ -1,19 +1,23 @@
-# Operations
+# 运维说明
 
-## Safe deployment sequence
+## 第一阶段部署流程
 
-1. Publish each service image independently with an immutable tag or digest.
-2. Copy `.env.example` to `.env`, insert secrets locally, and replace all image placeholders.
-3. Set the real externally terminated `OTA_PUBLIC_BASE_URL` and a long random `OTA_DEVICE_TOKEN`.
-4. Run `./scripts/deploy.sh` for validation only.
-5. Run `./scripts/deploy.sh --apply` to pull and start all three services.
-6. Install the rendered Nginx template on the host and run `nginx -t` before reload.
+1. 在服务器克隆本 `wkt-deploy` 仓库；无需克隆三个业务源码仓库。
+2. 将 `.env.example` 复制为不受 Git 跟踪的 `.env`，填写 AI 所需的真实密钥。
+3. 准备 `data/ai/uploads`、`data/ai/outputs`、`data/ota` 和 `backups` 目录。
+4. 运行 `./scripts/deploy.sh`，只做首次配置验证。
+5. 人工确认公网端口和实验室使用范围后，运行 `./scripts/deploy.sh --apply` 启动三个服务。
+6. 运行 `./scripts/status.sh` 查看状态。
 
-Compose ports bind only to `127.0.0.1`. HTTPS, certificates and public access belong exclusively to host Nginx.
+设备直接访问：
 
-## Independent release and update
+- AI：`http://139.129.17.67:18080`
+- 对讲：`ws://139.129.17.67:18081/intercom/ws`
+- OTA：`http://139.129.17.67:18082`
 
-Change only the selected image variable in `.env`, then run:
+Compose 直接绑定 `0.0.0.0`。当前不需要 Nginx、域名或 HTTPS，也不使用 OTA Token。HTTP OTA 仅限实验室验证；脚本不会连接远程服务器或修改云安全组和防火墙。
+
+## 独立更新与回滚
 
 ```bash
 ./scripts/update-service.sh intercom
@@ -21,50 +25,49 @@ Change only the selected image variable in `.env`, then run:
 ./scripts/update-service.sh ota
 ```
 
-Each command performs `pull SERVICE` followed by `up -d --no-deps SERVICE`; it does not restart other services.
-
-Direct equivalents are:
+每个命令只执行：
 
 ```bash
-docker compose pull ota
-docker compose up -d --no-deps ota
+docker compose pull SERVICE
+docker compose up -d --no-deps SERVICE
 ```
 
-## Status, logs and health
+因此不会联动重启其他服务。回滚时将 `.env` 中目标服务镜像改回旧的明确版本，再运行对应更新命令；不要使用 `latest`，不要删除 Volume 或 prune Docker。
+
+## 状态、日志和健康检查
 
 ```bash
 ./scripts/status.sh
 docker compose logs --tail=200 -f intercom
 docker compose logs --tail=200 -f ai
 docker compose logs --tail=200 -f ota
-curl --fail http://127.0.0.1:18080/health
+curl --fail http://139.129.17.67:18080/health
+curl --fail http://139.129.17.67:18082/health
 ```
 
-Compose reports `healthy` after the configured probes pass. Intercom uses a TCP listener probe because its application has no HTTP health route.
+AI 和 OTA 使用 HTTP `GET /health`。对讲使用 `/intercom/ws?device=wkt-deploy-healthcheck` 的真实 WebSocket 握手。
 
-## Rollback
+## OTA 备份与恢复
 
-Keep the previous immutable image reference. To roll back one service, restore only that variable in `.env` and run its update command. Do not use mutable tags and do not delete images or volumes as part of rollback.
+`./scripts/backup.sh` 归档完整 `OTA_DATA_ROOT`，包括 SQLite 数据库/WAL、固件和其他持久化文件。OTA 正在运行时，脚本只停止 OTA，创建 gzip tar 快照，再恢复 OTA；其他服务不受影响。
 
-## Backup and restore
+Linux 首次启动前应让 UID/GID `10001` 可写 OTA 目录：
 
-`./scripts/backup.sh` archives the complete `OTA_DATA_ROOT` (database, firmware and other persistent data). If OTA is running, the script stops only OTA, creates a gzip tar archive, and starts OTA again. This cold snapshot avoids copying a live SQLite database. It never prunes images, containers or volumes.
+```bash
+sudo install -d -o 10001 -g 10001 ./data/ota
+```
 
-On Linux, create `OTA_DATA_ROOT` for the image's non-root UID/GID before first start, for example `sudo install -d -o 10001 -g 10001 ./data/ota`.
+恢复流程：
 
-To restore:
+1. `docker compose stop ota`；
+2. 将当前 OTA 数据目录移到安全的临时位置；
+3. 用 `tar -tzf BACKUP` 检查备份；
+4. 将备份解压到 `OTA_DATA_ROOT` 的父目录；
+5. 检查 UID/GID 和权限；
+6. `docker compose start ota`，验证健康检查和实验室固件下载。
 
-1. stop only OTA: `docker compose stop ota`;
-2. move the current OTA data root aside;
-3. inspect the archive with `tar -tzf BACKUP`;
-4. extract it into the parent of `OTA_DATA_ROOT`;
-5. verify ownership and permissions;
-6. start OTA and verify health and a non-production firmware download.
+AI 的上传与输出目录使用宿主机文件备份工具处理。对讲无持久化 Volume。
 
-AI uploads and outputs live under `AI_DATA_ROOT`. Back them up using the host's normal filesystem backup tooling; no SQLite consistency step is currently needed. Intercom has no persistent volume.
+## 数据与秘密边界
 
-## Nginx installation
-
-Replace the template domain and certificate placeholders, copy it to the host Nginx site directory, enable it according to the operating system packaging, run `nginx -t`, then reload Nginx. Certificates and private keys remain host-managed and must never be copied into this repository or the service containers.
-
-The OTA location disables response compression, clears upstream `Accept-Encoding`, forwards `Range`/`If-Range`, forces byte-range handling, and disables proxy buffering. Query strings remain intact because every `proxy_pass` omits a URI suffix.
+`.env`、固件、SQLite、上传文件、生成输出和备份都不得提交 Git，也不得打入镜像。Public GHCR 镜像只包含应用和只读资源；运行数据通过 Volume 持久化，AI 密钥仅通过服务器本地 `.env` 注入。
