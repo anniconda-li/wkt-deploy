@@ -5,7 +5,7 @@
 | 服务 | 核对提交 | 正式镜像 | 容器端口 | 健康检查 | Volume |
 | --- | --- | --- | ---: | --- | --- |
 | intercom | `e5eb6ca` | `ghcr.io/anniconda-li/wkt-intercom-server:0.1.0` | `18081` | WebSocket `/intercom/ws?device=wkt-deploy-healthcheck` | 无 |
-| ai | `24e3606` | `ghcr.io/anniconda-li/wkt-ai-server:0.2.0` | `8000` | `GET /health` | `/app/uploads`、`/app/outputs` |
+| ai | `0a9aa7f` | `ghcr.io/anniconda-li/wkt-ai-server:0.2.1` | `8000` | `GET /health` | `/app/uploads`、`/app/outputs` |
 | ota | `214431f` | `ghcr.io/anniconda-li/wkt-ota-server:1.0.0` | `8000` | `GET /health` | `/app/data` |
 
 ## 对讲
@@ -14,7 +14,7 @@ Dockerfile 使用 Python 3.12、非 root 用户、`EXPOSE 18081` 和 `python mai
 
 ## AI
 
-目标正式版本为 0.2.0，实现核对提交为 `24e3606`。Dockerfile 使用 Python 3.11，并以 `python -m uvicorn main:app --host 0.0.0.0 --port 8000` 启动单 worker；镜像自带 `GET /health` 检查。宿主机仍只映射 `18080 -> 8000`。
+正式版本为 0.2.1，发布提交为 `0a9aa7f`，其中包含 WAI1 实现提交 `24e3606`。Dockerfile 使用 Python 3.11，并以 `python -m uvicorn main:app --host 0.0.0.0 --port 8000` 启动单 worker；镜像自带 `GET /health` 检查。宿主机仍只映射 `18080 -> 8000`。
 
 AI 运行环境包括 OpenAI-compatible 文本模型、DashScope、视觉、ASR、TTS 和设备协议配置。真实 API Key 只能存在于未跟踪的 `.env`；`.env.example` 仅使用 `REPLACE_WITH_SECRET` 占位符。
 
