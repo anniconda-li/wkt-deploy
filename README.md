@@ -4,7 +4,7 @@
 
 | 服务 | 设备地址 | 镜像 |
 | --- | --- | --- |
-| AI | `http://139.129.17.67:18080` | `ghcr.io/anniconda-li/wkt-ai-server:0.1.0` |
+| AI | `http://139.129.17.67:18080` | `ghcr.io/anniconda-li/wkt-ai-server:0.2.0` |
 | 对讲 | `ws://139.129.17.67:18081/intercom/ws` | `ghcr.io/anniconda-li/wkt-intercom-server:0.1.0` |
 | OTA | `http://139.129.17.67:18082` | `ghcr.io/anniconda-li/wkt-ota-server:1.0.0` |
 
@@ -20,6 +20,14 @@
 ```
 
 三个服务没有 `depends_on`，可以独立拉取和重建。服务器只需克隆 `wkt-deploy`，不需要克隆 AI、对讲、OTA 三个业务源码仓库；Compose 会直接从 Public GHCR 拉取正式镜像。
+
+AI 0.2.0 在同一个 `18080 -> 8000` TCP 映射上同时提供既有 HTTP API 和 WAI1 WebSocket。设备地址为：
+
+```text
+ws://139.129.17.67:18080/ai/ws?device=walkie-01&protocol=wai1
+```
+
+Docker Compose 的 TCP 端口映射天然支持 WebSocket，不需要新端口、Nginx、Traefik 或额外 Upgrade 配置。
 
 ## 首次部署
 
@@ -62,12 +70,18 @@ docker compose up -d --no-deps ota
 
 | 服务 | 宿主机目录 | 容器目录 | 内容 |
 | --- | --- | --- | --- |
-| AI | `${AI_DATA_ROOT}/uploads` | `/app/uploads` | 图片和上传的音频 |
+| AI | `${AI_DATA_ROOT}/uploads` | `/app/uploads` | 相机 JPEG/AOP1、相机和 WAI1 SQLite、分片临时文件、ROP1 回复 |
 | AI | `${AI_DATA_ROOT}/outputs` | `/app/outputs` | 生成的音频等输出 |
 | OTA | `${OTA_DATA_ROOT}` | `/app/data` | SQLite、WAL、固件和临时发布文件 |
 | 对讲 | 无 | 无 | 无持久化数据 |
 
 固件、数据库、运行数据和秘密都不打入镜像，也不提交到 Git。OTA 数据备份使用 `./scripts/backup.sh`；脚本只在需要一致性快照时停止并恢复 OTA，不操作其他服务，不删除 Volume，也不执行 Docker prune。
+
+## AI 进程模型与兼容性
+
+AI 必须保持单 Uvicorn worker、单副本；当前镜像 CMD 已是单 worker，不要增加 `--workers`。WAI1 上传元数据虽由 `/app/uploads/ai_ws.sqlite3` 持久化，但活跃连接替换、主动状态推送和后台 AI runtime task 仍是进程内状态，不能据此扩成多 worker 或多副本。WebSocket 断开不会取消已经开始的后台任务；进程重启也不会自动恢复已经发出的外部模型调用。
+
+AI 0.2.0 保留 `/ai/start`、`/ai/upload`、`/ai/finish`、`/ai/result_info`、`/ai/result_chunk`、`/ai/cancel`、`/ai/stop_audio`、`/camera/upload`、`/camera/upload/chunk`、`/camera/upload/finish` 和 `/camera/upload/cancel`，并新增 `/ai/ws?device=...&protocol=wai1`。对讲协议、OTA 协议和设备 ID 语义不变。
 
 ## 健康检查
 
