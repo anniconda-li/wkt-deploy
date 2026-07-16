@@ -44,7 +44,7 @@ services:
       - platform
 
   ai:
-    image: ${AI_IMAGE:-ghcr.io/anniconda-li/wkt-ai-server:0.2.1}
+    image: ${AI_IMAGE:-ghcr.io/anniconda-li/wkt-ai-server:0.3.0}
     restart: unless-stopped
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
