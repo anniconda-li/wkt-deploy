@@ -5,7 +5,7 @@
 | 服务 | 核对提交 | 正式镜像 | 容器端口 | 健康检查 | Volume |
 | --- | --- | --- | ---: | --- | --- |
 | intercom | `e5eb6ca` | `ghcr.io/anniconda-li/wkt-intercom-server:0.1.0` | `18081` | WebSocket `/intercom/ws?device=wkt-deploy-healthcheck` | 无 |
-| ai | `a976cc9` | `ghcr.io/anniconda-li/wkt-ai-server:0.3.0` | `8000` | `GET /health` | `/app/uploads`、`/app/outputs` |
+| ai | `b325752` | `ghcr.io/anniconda-li/wkt-ai-server:0.3.1` | `8000` | `GET /health` | `/app/uploads`、`/app/outputs` |
 | ota | `214431f` | `ghcr.io/anniconda-li/wkt-ota-server:1.0.0` | `8000` | `GET /health` | `/app/data` |
 
 ## 对讲
@@ -14,7 +14,7 @@ Dockerfile 使用 Python 3.12、非 root 用户、`EXPOSE 18081` 和 `python mai
 
 ## AI
 
-正式版本为 0.3.0，发布提交为 `a976cc9`。本版本在既有 WAI1、JPEG 分片上传和模型刷新基础上补充馆方资料问答、五件演示文物的视觉锚点识别，并修正 `text_ready` 与最终音频状态的并发通知顺序。Dockerfile 使用 Python 3.11，并以 `python -m uvicorn main:app --host 0.0.0.0 --port 8000` 启动单 worker；镜像自带 `GET /health` 检查。宿主机仍只映射 `18080 -> 8000`。
+正式版本为 0.3.1，发布提交为 `b325752`。本版本在 0.3.0 基础上约束自我介绍只使用“我是博物馆AI讲解员。”，并限制文物介绍只出现省级及以上地名。Dockerfile 使用 Python 3.11，并以 `python -m uvicorn main:app --host 0.0.0.0 --port 8000` 启动单 worker；镜像自带 `GET /health` 检查。宿主机仍只映射 `18080 -> 8000`。
 
 AI 运行环境包括 OpenAI-compatible 文本模型、DashScope、视觉、ASR、TTS 和设备协议配置。真实 API Key 只能存在于未跟踪的 `.env`；`.env.example` 仅使用 `REPLACE_WITH_SECRET` 占位符。
 
